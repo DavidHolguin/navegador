@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor Web PWA</title>
+    
+    <!-- Tailwind CSS para un diseño moderno y responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuración del tema para la barra de estado del navegador (móvil) -->
+    <meta name="theme-color" content="#1f2937">
+
+    <!-- Enlace al Manifiesto de la App Web -->
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        /* Estilos personalizados para una mejor apariencia */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent; /* Evita el destello azul al tocar en móviles */
+        }
+        /* Asegura que el iframe ocupe todo el espacio disponible */
+        #iframe-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 50;
+            background-color: #fff;
+        }
+        #website-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        /* Animación suave para las transiciones */
+        .view-transition {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .view-hidden {
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+        }
+    </style>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 h-full overflow-x-hidden">
+
+    <!-- Vista Principal de la Aplicación -->
+    <div id="app-view" class="p-4 md:p-6 max-w-4xl mx-auto view-transition">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Visor Web</h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">Agrega URLs y ábrelas dentro de la app.</p>
+        </header>
+
+        <!-- Formulario para agregar nuevos sitios -->
+        <form id="add-site-form" class="mb-8 flex flex-col sm:flex-row gap-3">
+            <input type="url" id="url-input" placeholder="https://ejemplo.com" required class="flex-grow p-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 shadow-md hover:shadow-lg">
+                Agregar Sitio
+            </button>
+        </form>
+
+        <!-- Contenedor para la lista de sitios guardados -->
+        <div id="sites-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Las tarjetas de los sitios se insertarán aquí dinámicamente -->
+        </div>
+        
+        <!-- Mensaje cuando no hay sitios -->
+        <div id="empty-state" class="text-center py-10 px-4 hidden">
+             <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-white">Sin sitios web</h3>
+            <p class="mt-1 text-sm text-gray-500">Comienza agregando una URL en el campo de arriba.</p>
+        </div>
+    </div>
+
+    <!-- Vista del Iframe para mostrar el sitio web -->
+    <div id="iframe-view" class="fixed top-0 left-0 w-full h-full bg-gray-800 z-50 view-transition view-hidden">
+        <header class="bg-gray-800 dark:bg-gray-900 text-white p-3 flex items-center justify-between shadow-md">
+            <button id="back-button" class="text-white hover:bg-gray-700 rounded-full p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <span id="iframe-title" class="font-semibold truncate flex-grow mx-4">Cargando...</span>
+            <a id="open-external-button" href="#" target="_blank" rel="noopener noreferrer" class="text-white hover:bg-gray-700 rounded-full p-2" title="Abrir en navegador">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                  <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                </svg>
+            </a>
+        </header>
+        <iframe id="website-iframe" class="w-full h-full bg-white" sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-top-navigation"></iframe>
+    </div>
+
+    <!-- Modal de Alerta -->
+    <div id="alert-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900 mb-4">
+                <svg class="h-6 w-6 text-red-600 dark:text-red-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+                </svg>
+            </div>
+            <h3 id="alert-title" class="text-lg font-medium text-gray-900 dark:text-white">Error</h3>
+            <p id="alert-message" class="mt-2 text-sm text-gray-600 dark:text-gray-300">Algunos sitios no se pueden mostrar.</p>
+            <button id="close-alert-button" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- REGISTRO DEL SERVICE WORKER Y MANIFEST ---
+        // Esto permite que la aplicación funcione sin conexión y sea instalable (PWA).
+        
+        // 1. Contenido del manifest.json
+        const manifestContent = {
+            "name": "Visor Web PWA",
+            "short_name": "VisorWeb",
+            "description": "Una PWA para guardar y visualizar sitios web sin salir de la aplicación.",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#111827",
+            "theme_color": "#1f2937",
+            "icons": [
+                {
+                    "src": "https://placehold.co/192x192/3b82f6/ffffff?text=VW",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "https://placehold.co/512x512/3b82f6/ffffff?text=VW",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }
+            ]
+        };
+
+        // 2. Contenido del service-worker.js
+        const swContent = `
+            const CACHE_NAME = 'visor-web-pwa-cache-v1';
+            const urlsToCache = [
+                '/',
+                '/index.html',
+                'https://cdn.tailwindcss.com',
+                'https://rsms.me/inter/inter.css'
+            ];
+
+            self.addEventListener('install', event => {
+                event.waitUntil(
+                    caches.open(CACHE_NAME)
+                        .then(cache => {
+                            console.log('Cache abierto');
+                            return cache.addAll(urlsToCache);
+                        })
+                );
+            });
+
+            self.addEventListener('fetch', event => {
+                event.respondWith(
+                    caches.match(event.request)
+                        .then(response => {
+                            if (response) {
+                                return response;
+                            }
+                            return fetch(event.request);
+                        })
+                );
+            });
+        `;
+
+        // 3. Crear y enlazar los archivos virtualmente
+        // Manifest
+        const manifestBlob = new Blob([JSON.stringify(manifestContent)], { type: 'application/json' });
+        const manifestUrl = URL.createObjectURL(manifestBlob);
+        document.querySelector('link[rel="manifest"]').setAttribute('href', manifestUrl);
+
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            const swBlob = new Blob([swContent], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(swBlob);
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => console.log('Service Worker registrado con éxito:', registration))
+                    .catch(error => console.log('Error en el registro del Service Worker:', error));
+            });
+        }
+
+        // --- LÓGICA DE LA APLICACIÓN ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const addSiteForm = document.getElementById('add-site-form');
+            const urlInput = document.getElementById('url-input');
+            const sitesList = document.getElementById('sites-list');
+            const emptyState = document.getElementById('empty-state');
+            
+            const appView = document.getElementById('app-view');
+            const iframeView = document.getElementById('iframe-view');
+            const websiteIframe = document.getElementById('website-iframe');
+            const backButton = document.getElementById('back-button');
+            const iframeTitle = document.getElementById('iframe-title');
+            const openExternalButton = document.getElementById('open-external-button');
+
+            const alertModal = document.getElementById('alert-modal');
+            const alertTitle = document.getElementById('alert-title');
+            const alertMessage = document.getElementById('alert-message');
+            const closeAlertButton = document.getElementById('close-alert-button');
+
+            let sites = JSON.parse(localStorage.getItem('sites')) || [];
+
+            function saveSites() {
+                localStorage.setItem('sites', JSON.stringify(sites));
+            }
+
+            function getHostname(url) {
+                try {
+                    return new URL(url).hostname.replace('www.', '');
+                } catch (e) {
+                    return url;
+                }
+            }
+            
+            function getFaviconUrl(url) {
+                // Usa un servicio para obtener el favicon, con un fallback
+                const hostname = new URL(url).hostname;
+                return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
+            }
+
+            function renderSites() {
+                sitesList.innerHTML = '';
+                if (sites.length === 0) {
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                    sites.forEach((siteUrl, index) => {
+                        const hostname = getHostname(siteUrl);
+                        const favicon = getFaviconUrl(siteUrl);
+
+                        const siteCard = document.createElement('div');
+                        siteCard.className = 'site-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex items-center gap-4 cursor-pointer hover:shadow-lg hover:scale-105 transform transition-all duration-300';
+                        siteCard.dataset.index = index;
+                        siteCard.dataset.url = siteUrl;
+
+                        siteCard.innerHTML = `
+                            <img src="${favicon}" alt="Favicon for ${hostname}" class="w-10 h-10 rounded-full bg-gray-200" onerror="this.onerror=null;this.src='https://placehold.co/64x64/e2e8f0/64748b?text=${hostname.charAt(0).toUpperCase()}';">
+                            <div class="flex-grow truncate">
+                                <p class="font-semibold text-gray-800 dark:text-white truncate">${hostname}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 truncate">${siteUrl}</p>
+                            </div>
+                            <button class="delete-button flex-shrink-0 text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" data-index="${index}" title="Eliminar sitio">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        `;
+                        sitesList.appendChild(siteCard);
+                    });
+                }
+            }
+
+            function showAlert(title, message) {
+                alertTitle.textContent = title;
+                alertMessage.textContent = message;
+                alertModal.classList.remove('hidden');
+            }
+
+            addSiteForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                let newUrl = urlInput.value.trim();
+                if (newUrl) {
+                    // Añadir https:// si no está presente
+                    if (!/^https?:\/\//i.test(newUrl)) {
+                        newUrl = 'https://' + newUrl;
+                    }
+                    if (!sites.includes(newUrl)) {
+                        sites.push(newUrl);
+                        saveSites();
+                        renderSites();
+                    }
+                    urlInput.value = '';
+                }
+            });
+
+            sitesList.addEventListener('click', (e) => {
+                const target = e.target;
+                const deleteButton = target.closest('.delete-button');
+                const siteCard = target.closest('.site-card');
+
+                if (deleteButton) {
+                    const index = parseInt(deleteButton.dataset.index, 10);
+                    sites.splice(index, 1);
+                    saveSites();
+                    renderSites();
+                } else if (siteCard) {
+                    const url = siteCard.dataset.url;
+                    openSite(url);
+                }
+            });
+
+            function openSite(url) {
+                iframeTitle.textContent = getHostname(url);
+                websiteIframe.src = url;
+                openExternalButton.href = url;
+                
+                appView.classList.add('view-hidden');
+                iframeView.classList.remove('view-hidden');
+
+                // Advertencia sobre X-Frame-Options
+                websiteIframe.onload = () => {
+                    try {
+                        // Intentar acceder a una propiedad del contenido del iframe
+                        // Si falla, es por Same-Origin Policy, lo que significa que cargó algo.
+                        const a = websiteIframe.contentWindow.location.href;
+                    } catch (e) {
+                        // Si el error es de seguridad, es probable que la página se haya cargado.
+                        if (e instanceof DOMException && e.name === 'SecurityError') {
+                             console.log('Sitio cargado con éxito (origen cruzado).');
+                        }
+                    }
+                };
+                
+                websiteIframe.onerror = () => {
+                    showAlert('Error de Carga', `No se pudo cargar el sitio. Es posible que bloquee la visualización en iframes.`);
+                    closeSite();
+                };
+            }
+
+            function closeSite() {
+                iframeView.classList.add('view-hidden');
+                appView.classList.remove('view-hidden');
+                // Limpiar el iframe para detener la carga y liberar recursos
+                websiteIframe.src = 'about:blank';
+                iframeTitle.textContent = 'Cargando...';
+            }
+
+            backButton.addEventListener('click', closeSite);
+            closeAlertButton.addEventListener('click', () => alertModal.classList.add('hidden'));
+
+            // Renderizar los sitios al cargar la página
+            renderSites();
+        });
+    </script>
+</body>
+</html>
